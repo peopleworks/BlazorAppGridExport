@@ -1,0 +1,188 @@
+﻿@page "/"
+@using DevExpress.ExpressApp
+@using DevExpress.ExpressApp.Blazor.Editors
+@using DevExpress.ExpressApp.Blazor.Editors.Models
+@using DevExpress.XtraPrinting
+@using DevExpress.XtraReports.UI
+@using Grid.Northwind
+@using Microsoft.EntityFrameworkCore
+@using BlazorAppGridExport.Data
+@using BlazorAppGridExport.Helpers
+@inject IDbContextFactory<NorthwindContext> NorthwindContextFactory
+@inject IJSRuntime JsRuntime
+@implements IDisposable
+@using DevExpress.ExpressApp.Blazor.Services
+
+<div class="card p-2">
+    <DxToolbar>
+        <DxToolbarItem Text="New"
+                       IconCssClass="grid-new-row"
+                       Click="OnCreateNew" />
+        <DxToolbarItem Text="Edit"
+                       IconCssClass="grid-edit-row"
+                       Click="OnEdit" />
+        <DxToolbarItem Text="Delete"
+                       IconCssClass="grid-delete-row"
+                       Click="OnDelete" />
+        <DxToolbarItem Text="Column Chooser"
+                       RenderStyle="ButtonRenderStyle.Secondary"
+                       IconCssClass="grid-column-chooser"
+                       CssClass="column-chooser-button"
+                       BeginGroup="true"
+                       Click="OnShowColumnChooser" />
+        <DxToolbarItem Text="Export PDF"
+                       IconCssClass=""
+                       Click="ExportPDF" />
+    </DxToolbar>
+</div>
+
+<p />
+
+<DxGrid Data="Data"
+        EditModelSaving="OnEditModelSaving"
+        DataItemDeleting="OnDataItemDeleting"
+        KeyFieldName="EmployeeId"
+        EditMode="GridEditMode.PopupEditForm"
+        FocusedRowEnabled=true
+        @ref=MyGrid>
+    <Columns>
+        <DxGridDataColumn FieldName="FirstName" Caption="FirstName" />
+        <DxGridDataColumn FieldName="LastName" Caption="LastName" />
+        <DxGridDataColumn FieldName="Title" Caption="Title" />
+        <DxGridDataColumn FieldName="HireDate" Caption="HireDate" />
+    </Columns>
+    <EditFormTemplate Context="editFormContext">
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="First Name:">
+                @editFormContext.GetEditor("FirstName")
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Last Name:">
+                @editFormContext.GetEditor("LastName")
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Title:">
+                @editFormContext.GetEditor("Title")
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Hire Date:">
+                @editFormContext.GetEditor("HireDate")
+            </DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanMd="12">
+                <ValidationSummary />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </EditFormTemplate>
+</DxGrid>
+
+@code {
+    DxGrid MyGrid { get; set; }
+    IEnumerable<object> Data { get; set; }
+    NorthwindContext Northwind { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Northwind = NorthwindContextFactory.CreateDbContext();
+        Data = Northwind.Employees
+            .ToList();
+    }
+
+    public void Dispose()
+    {
+        Northwind?.Dispose();
+    }
+
+    async Task OnEditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        var editModel = (Employee)e.EditModel;
+        // Re-query a data item from the database.
+        var dataItem = e.IsNew ? new Employee() : Northwind.Employees.Find(editModel.EmployeeId);
+        // Assign changes from the edit model to the data item.
+        if (dataItem != null)
+        {
+            dataItem.FirstName = editModel.FirstName;
+            dataItem.LastName = editModel.LastName;
+            dataItem.Title = editModel.Title;
+            dataItem.HireDate = editModel.HireDate;
+            // Post changes to the database.
+            if (e.IsNew)
+                await Northwind.AddAsync(dataItem);
+            await Northwind.SaveChangesAsync();
+            // Reload the entire Grid.
+            Data = await Northwind.Employees.ToListAsync();
+        }
+    }
+
+    async Task OnDataItemDeleting(GridDataItemDeletingEventArgs e)
+    {
+        // Re-query a data item from the database.
+        var dataItem = Northwind.Employees.Find((e.DataItem as Employee).EmployeeId);
+        if (dataItem != null)
+        {
+            // Remove the data item from the database.
+            Northwind.Remove(dataItem);
+            await Northwind.SaveChangesAsync();
+            // Reload the entire Grid.
+            Data = await Northwind.Employees.ToListAsync();
+        }
+    }
+
+
+    async Task OnCreateNew(ToolbarItemClickEventArgs e)
+    {
+        await MyGrid.StartEditNewRowAsync();
+    }
+
+    async Task OnEdit(ToolbarItemClickEventArgs e)
+    {
+        if (MyGrid.GetFocusedDataItem() != null)
+            await MyGrid.StartEditDataItemAsync(MyGrid.GetFocusedDataItem());
+    }
+
+    void OnDelete(ToolbarItemClickEventArgs e)
+    {
+        if (MyGrid.GetFocusedDataItem() != null)
+            MyGrid.ShowDataItemDeleteConfirmation(MyGrid.GetFocusedDataItem());
+    }
+
+    void OnShowColumnChooser()
+    {
+        MyGrid.ShowColumnChooser(".column-chooser-button");
+    }
+
+    void ExportPDF()
+    {
+        IList<string> propertyNames = new List<string>();
+        IReadOnlyList<IGridColumn> visibleColumns = MyGrid.GetVisibleColumns();
+
+        foreach (DxGridDataColumn column in visibleColumns)
+        {
+            propertyNames.Add(column.FieldName);
+        }
+
+        string fields = String.Empty;
+        foreach (var detail in propertyNames)
+        {
+            fields += detail;
+            if (detail != propertyNames.Last()) { fields += ";"; }
+        }
+
+        //Create Report
+        XtraReport report = new XtraReport();
+        report.DataSource = Data;
+        ReportHelper.CreateReport(report, propertyNames.ToArray());
+        report.Name = "Employee Report.pdf";
+        report.CreateDocument();
+
+        //Export PDF Options
+        PdfExportOptions pdfOptions = report.ExportOptions.Pdf;
+        pdfOptions.PdfACompatibility = PdfACompatibility.PdfA3b;
+        pdfOptions.DocumentOptions.Title = "Employee Report";
+
+        string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), report.Name);
+        report.ExportToPdf(path, pdfOptions);
+
+        if (!String.IsNullOrEmpty(path))
+        {
+            JsRuntime.InvokeVoidAsync("BlazorOpenFile", report.Name, Convert.ToBase64String(File.ReadAllBytes(path)), ".pdf", "application/pdf");
+        }
+
+    }
+}
