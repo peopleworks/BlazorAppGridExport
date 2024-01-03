@@ -5,7 +5,7 @@ namespace BlazorAppGridExport.Helpers
 {
     public class ReportHelper
     {
-        public static void CreateReport(XtraReport report, string[] fields)
+        public static void CreateReport(XtraReport report, string[] fields, bool isLandScape)
         {
             PageHeaderBand pageHeader = new PageHeaderBand() { HeightF = 23, Name = "pageHeaderBand" };
             int tableWidth = (int)(report.PageWidth - report.Margins.Left - report.Margins.Right);
@@ -65,6 +65,8 @@ namespace BlazorAppGridExport.Helpers
             detailTable.EndInit();
             detailTable.AdjustSize();
             detail.Controls.Add(detailTable);
+            report.Landscape = isLandScape;
+   
             report.Bands.AddRange(new Band[] { detail, pageHeader });
         }
     }

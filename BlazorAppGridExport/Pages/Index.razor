@@ -1,4 +1,7 @@
 ﻿@page "/"
+@using DevExpress.Data.Filtering
+@using DevExpress.Data.Helpers
+@using DevExpress.Data.Linq
 @using DevExpress.ExpressApp
 @using DevExpress.ExpressApp.Blazor.Editors
 @using DevExpress.ExpressApp.Blazor.Editors.Models
@@ -44,6 +47,7 @@
         KeyFieldName="EmployeeId"
         EditMode="GridEditMode.PopupEditForm"
         FocusedRowEnabled=true
+        ShowFilterRow=true
         @ref=MyGrid>
     <Columns>
         <DxGridDataColumn FieldName="FirstName" Caption="FirstName" />
@@ -74,7 +78,7 @@
 
 @code {
     DxGrid MyGrid { get; set; }
-    IEnumerable<object> Data { get; set; }
+    IEnumerable<Employee> Data { get; set; }
     NorthwindContext Northwind { get; set; }
 
     protected override void OnInitialized()
@@ -164,10 +168,19 @@
             if (detail != propertyNames.Last()) { fields += ";"; }
         }
 
+
+        // Get Filter Data
+        CriteriaOperator criteria = CriteriaOperator.Parse(MyGrid.GetFilterCriteria().ToString());
+
+        Func<Employee, bool> predicate = CriteriaCompiler.ToPredicate<Employee>(criteria, CriteriaCompilerDescriptor.Get<Employee>());
+        IEnumerable<Employee> filteredGrid = Data.Where(o => predicate(o)).ToList();
+
+
+
         //Create Report
         XtraReport report = new XtraReport();
-        report.DataSource = Data;
-        ReportHelper.CreateReport(report, propertyNames.ToArray());
+        report.DataSource = filteredGrid;
+        ReportHelper.CreateReport(report, propertyNames.ToArray(), false);
         report.Name = "Employee Report.pdf";
         report.CreateDocument();
 
