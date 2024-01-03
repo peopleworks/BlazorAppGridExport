@@ -170,12 +170,28 @@
 
 
         // Get Filter Data
-        CriteriaOperator criteria = CriteriaOperator.Parse(MyGrid.GetFilterCriteria().ToString());
+        IEnumerable<Employee> filteredGrid;
 
-        Func<Employee, bool> predicate = CriteriaCompiler.ToPredicate<Employee>(criteria, CriteriaCompilerDescriptor.Get<Employee>());
-        IEnumerable<Employee> filteredGrid = Data.Where(o => predicate(o)).ToList();
+        if (MyGrid.GetFilterCriteria() != null)
+        {
+            CriteriaOperator criteria = CriteriaOperator.Parse(MyGrid.GetFilterCriteria().ToString());
 
+            Func<Employee, bool> predicate = CriteriaCompiler.ToPredicate<Employee>(criteria, CriteriaCompilerDescriptor.Get<Employee>());
+            filteredGrid = Data.Where(o => predicate(o)).ToList();
+        }
+        else
+        {
+            filteredGrid = Data.ToList();
+        }
 
+        // Get First Sorted Column
+        string sortedColumn = MyGrid.GetSortedColumns().FirstOrDefault().FieldName;
+
+        if (!string.IsNullOrEmpty(sortedColumn))
+        {
+            var pi = typeof(Employee).GetProperty(sortedColumn);
+            filteredGrid = filteredGrid.OrderBy(x => pi.GetValue(x, null));
+        }
 
         //Create Report
         XtraReport report = new XtraReport();
