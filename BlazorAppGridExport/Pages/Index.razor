@@ -172,7 +172,7 @@
         // Get Filter Data
         IEnumerable<Employee> filteredGrid;
 
-        if (MyGrid.GetFilterCriteria() != null)
+        if (ReferenceEquals(MyGrid.GetFilterCriteria(), null))
         {
             CriteriaOperator criteria = CriteriaOperator.Parse(MyGrid.GetFilterCriteria().ToString());
 
